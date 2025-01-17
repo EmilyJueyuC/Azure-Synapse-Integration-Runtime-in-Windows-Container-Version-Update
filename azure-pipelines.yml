@@ -1,0 +1,35 @@
+trigger:
+  branches:
+    include:
+      - main  # Trigger pipeline on changes to main branch
+
+pool:
+  vmImage: 'windows-latest'  # Use a Windows-based image for building Docker containers
+
+variables:
+  imageName: 'tst-auea-nswp-acrimg-syn-01'
+  tag: 'latest'
+  acrName: 'tstaueanswpacrsyn01.azurecr.io'
+  registryServiceConnection: 'SP-NSWPORTS-DEVOPS-AUTO'  # Azure service connection for ACR
+
+steps:
+- task: Docker@2
+  inputs:
+    containerRegistry: $(registryServiceConnection)  # Set ACR connection
+    repository: $(acrName)/$(imageName)
+    command: 'buildAndPush'
+    Dockerfile: '$(Build.SourcesDirectory)/Dockerfile'  # Path to your Dockerfile
+    tags: $(tag)  # Tag for the image
+    buildContext: '$(Build.SourcesDirectory)'  # Root directory of the repository
+    arguments: '--no-cache'  # Optional: Use to skip cache during build
+
+- task: AzureCLI@2
+  inputs:
+    azureSubscription: 'SP-NSWPORTS-DEVOPS-AUTO'  # Azure Subscription for Azure CLI
+    scriptType: 'pscore'
+    scriptLocation: 'inlineScript'
+    inlineScript: |
+      az acr login --name $(acrName)
+      docker tag $(acrName)/$(imageName):$(tag) $(acrName)/$(imageName):$(Build.BuildId)
+      docker push $(acrName)/$(imageName):$(Build.BuildId)
+    displayName: 'Push Docker Image to ACR'
